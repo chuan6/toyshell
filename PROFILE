@@ -1,0 +1,3 @@
+prompt_sign:myshell -> 
+path:/bin/|/usr/bin/
+home:/home/leo/
