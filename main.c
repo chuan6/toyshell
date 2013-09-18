@@ -13,6 +13,9 @@
  * Execute the command.
  **/
 
+static pid_t cmdpid;	// the pid of the process forked from shell,
+						//  or, the groupid of all the processes forked later.
+
 static const char *cmd_alias = "alias";
 static const char *cmd_cd = "cd";
 static const char *cmd_exit = "exit";
@@ -23,6 +26,7 @@ typedef struct {
 	char **path;
 } prf;
 static prf *readProfile(char *profile);
+static void alarm_sighandler(int sig);
 
 int
 main(int argc, char *argv[])
@@ -30,6 +34,7 @@ main(int argc, char *argv[])
 	// Not to be interrupted by Ctrl-C.
 	//sigaction(SIGINT, SIG_IGN, NULL);
 	//sigaction(SIGQUIT, SIG_IGN, NULL);
+	//signal(SIGALRM, alarm_sighandler);
 
 	char *profile;
 	switch (argc) {
@@ -51,15 +56,28 @@ main(int argc, char *argv[])
 	Alias *env = (Alias *)calloc(NALIAS_MAX, sizeof(Alias));
 	SetEnv(file->path, env);
 
-	char buf[1024];
+	char buf[CMDBUF];
 	int withAlarm = 0;
-	pid_t pid;
+	struct sigaction sa;
 	int *stat_loc;
 	Command *c;
 	printf("%s", file->prompt);
-	while (gets(buf) != NULL) {
+	while (fgets(buf, CMDBUF, stdin) != NULL) {
+		if (*Norm(buf) == '\0')
+			continue;
+		
 		if (!strcmp(buf, cmd_exit))
 			break;
+
+		if (withAlarm) {
+			alarm(ALARM_SEC);
+			sa.sa_handler = alarm_sighandler;
+			sigemptyset(&sa.sa_mask);	// block sigs of type being handled
+			sa.sa_flags = SA_RESTART;	// restart syscalls if possible
+			if (sigaction(SIGALRM, &sa, NULL) < 0) {
+				perror("Handling of SIGALRM failed.\n");
+			}
+		}
 
 		if (!strncmp(buf, cmd_cd, strlen(cmd_cd))
 			&& isspace(*(buf + strlen(cmd_cd)))) {
@@ -71,20 +89,26 @@ main(int argc, char *argv[])
 			&& isspace(*(buf + strlen(cmd_alarm)))) {
 			Builtin_alarm(buf + strlen(cmd_alarm), &withAlarm);
 		} else {
-			switch (pid = fork()) {
+			switch (cmdpid = fork()) {
 			case -1:
 				fprintf(stderr, "fork() in main failed.\n");
 				break;
 			case 0:		// child process
+				setpgid(0, 0);	// change groupid of the child process to its own pid
 				RunCommand(c = ParseCommand(buf), withAlarm);
 				FreeCommand(c);
 				break;
 			default:	// parent process; pid > 0
-				printf("main: pid at parent: %d\n", pid);
-				waitpid(pid, stat_loc, 0);printf("main: hello, %d returns.\n", pid);
+				printf("main: pid at parent: %d (gpid: %d)\n", cmdpid, getpgrp());
+				waitpid(cmdpid, stat_loc, 0);printf("main: hello, %d returns.\n", cmdpid);
 				break;
 			}
 		}
+
+		if (withAlarm) {printf("to clear the alarm\n");
+			alarm(0);	// command finishes, clear alarm
+		}
+
 		printf("%s", file->prompt);
 	}
 	printf("main: exit from pid: %d\n", getpid());
@@ -166,4 +190,30 @@ FAIL:
 	free(path);
 	printf("Invalid content or wrong path value in %s.\n", profile);
 	return NULL;
+}
+
+
+void alarm_sighandler(int sig) {
+	printf("inside signal handler.\n");
+	if (sig != SIGALRM)
+		return;
+
+	pid_t groupid = cmdpid;	printf("alarm_sighandler: groupid to be used is %d\n", groupid);
+
+	// 1st, stop all the processes in process group groupid
+	kill(0 - groupid, SIGSTOP);
+
+	// 2nd, ask user, if continue, or abort
+	char c;
+ASK:
+	printf("\nThe command has run for %d seconds now. Do you want to continue? (y/N) ", ALARM_SEC);
+	scanf("%c", &c);
+	if (c=='y' || c=='Y') {
+		// 3rd, user chooses to continue, hence continue all the processes that have been stopped
+		kill(0 - groupid, SIGCONT);
+	} else if (c=='n' || c=='N') {
+		// 3rd, user chooses to abort, hence kill all the processes that have been stopped
+		kill(0 - groupid, SIGKILL);
+	} else
+		goto ASK;
 }

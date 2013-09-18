@@ -20,7 +20,6 @@ static int redir_io(int fd_in, int fd_out);
 static void runcmd(PipeElem *pipe);
 static void execute(PipeElem *env);
 static char *unalias(char *cmdname);
-static void sigalrmHandler(int signum);
 
 static pid_t test;
 
@@ -29,22 +28,9 @@ void SetEnv(char **p, Alias *e) {
 	env = e;
 }
 
-void RunCommand(Command *c, int alrm) {
+void RunCommand(Command *c, int alrm) {printf("RunCommand: pid is %d, gpid is %d\n", getpid(), getpgrp());
 	if (c == NULL)
 		return;
-
-	struct sigaction sa;
-	withAlarm = alrm;
-	if (withAlarm) {
-		alarm(ALARM_SEC);
-		groupid = getpgrp();
-		sa.sa_handler = sigalrmHandler;
-		sigemptyset(&sa.sa_mask);	// block sigs of type being handled
-		sa.sa_flags = SA_RESTART;	// restart syscalls if possible
-		if (sigaction(SIGALRM, &sa, NULL) < 0) {
-			perror("Handling of SIGALRM failed.\n");
-		}
-	}
 
 	PipeElem *head = c->pipe->pipewith;
 	PipeElem *tail = head->pipewith;
@@ -81,7 +67,7 @@ void runcmd(PipeElem *c) {// printf("runcmd\n");
 	close_err(p[RD]);// printf("runcmd -> 1st close\n");
 	close_err(p[WR]);// printf("runcmd -> 2nd close\n");
 	
-	printf("runcmd: pid is %d; pid1 is %d; pid2 is %d\n", getpid(), pid1, pid2);
+	printf("runcmd: pid is %d(gpid: %d); pid1 is %d; pid2 is %d\n", getpid(), getpgrp(), pid1, pid2);
 	waitpid(pid1, status1, 0);
 	printf("runcmd: hello, %d returns.\n", pid1);
 	waitpid(pid2, status2, 0);
@@ -135,26 +121,6 @@ char *unalias(char *name) {
 			return p->val;
 	}
 	return NULL;
-}
-
-void sigalrmHandler(int sig) {printf("inside signal handler.\n");
-	if (sig != SIGALRM)
-		return;
-	char c;
-ASK:
-	printf("\nThe command has run for %d seconds now. Do you want to continue? (y/N) ", ALARM_SEC);
-	scanf("%c", &c);
-	if (c=='y' || c=='Y')
-		return;
-	if (c=='n' || c=='N') {
-		printf("groupid: %d, current: %d\n", groupid, getpgrp());
-		if (kill(test, SIGKILL)) {
-			printf("The process group %d cannot be killed.\n", groupid);
-			perror("kill failed.\n");
-			exit(1);
-		}
-	} else
-		goto ASK;
 }
 
 void close_err(int fd) {

@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#define CMDBUF 1024
 #define NALIAS_MAX 100
 #define ALARM_SEC 1
 
