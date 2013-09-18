@@ -49,68 +49,43 @@ void RunCommand(Command *c, int alrm) {
 	PipeElem *head = c->pipe->pipewith;
 	PipeElem *tail = head->pipewith;
 
-	if (tail != NULL) {
-		int *stat_loc;
-		int *stat_loc1;
-
-		int p[2];	// file descripters for read or write of a pipe
-		pipe_err(p);
-
-		pid_t pid_1, pid_2;
-		if ((pid_1 = fork()) == 0) {
-			redir_io(c->fin, p[WR]);
-			close_err(p[RD]);
-			execute(head);
-		}
-		if ((pid_2 = fork()) == 0) {
-			redir_io(p[RD], c->fout);
-			close_err(p[WR]);
-			runcmd(tail);
-		}
-		close_err(p[RD]);
-		close_err(p[WR]);
-		printf("%d %d\n", pid_1, pid_2);
-		if (waitpid(pid_1, stat_loc, 0)==pid_1
-			&& waitpid(pid_2, stat_loc1, 0) == pid_2) {
-			alarm(0);
-		}
-	} else {	// tail == NULL
-		int *stat_loc;
-		pid_t pid;
-		if ((pid = fork()) == 0) {
-			redir_io(c->fin, c->fout);
-			execute(head);
-		}
-		printf("%d\n", pid);
-		test = waitpid(pid, stat_loc, 0);printf("test %d\n", test);
-		if (test == pid) {
-			alarm(0);
-		}
+	redir_io(c->fin, c->fout);
+	if (tail == NULL) {
+		execute(head);
+	} else {
+		runcmd(head);
 	}
+
+	exit(0);
 }
 
 void runcmd(PipeElem *c) {// printf("runcmd\n");
 	if (c->pipewith == NULL)
 		execute(c);
 
-	int *stat_loc;
-	int *stat_loc1;
+	pid_t pid1, pid2;
+	int *status1, *status2;
 	int p[2];	// file descripters for read or write of a pipe
+
 	pipe_err(p);
-	if (fork() == 0) {
+	if ((pid1 = fork()) == 0) {
 		redir_io(STDIN, p[WR]);
 		close_err(p[RD]);
 		execute(c);
 	}
-	if (fork() == 0) {
+	if ((pid2 = fork()) == 0) {
 		redir_io(p[RD], STDOUT);
 		close_err(p[WR]);
 		runcmd(c->pipewith);
 	}
 	close_err(p[RD]);// printf("runcmd -> 1st close\n");
 	close_err(p[WR]);// printf("runcmd -> 2nd close\n");
-	wait(stat_loc);
-	wait(stat_loc1);
+	
+	printf("runcmd: pid is %d; pid1 is %d; pid2 is %d\n", getpid(), pid1, pid2);
+	waitpid(pid1, status1, 0);
+	printf("runcmd: hello, %d returns.\n", pid1);
+	waitpid(pid2, status2, 0);
+	printf("runcmd: hello, %d returns.\n", pid2);
 }
 
 void execute(PipeElem *c) {
@@ -121,7 +96,7 @@ void execute(PipeElem *c) {
 		strcpy(p, q);
 		execv(strcat(p, c->name), c->argv);
 	}
-	// if above failed, try unalias the command name
+	// if above failed, try unaliasing the command name
 	if ((c->name = unalias(c->name)) != NULL) {
 		for (i = 0; (q = *(pathenv+i)) != NULL; i++) {
 			strcpy(p, q);
@@ -162,7 +137,7 @@ char *unalias(char *name) {
 	return NULL;
 }
 
-void sigalrmHandler(int sig) {
+void sigalrmHandler(int sig) {printf("inside signal handler.\n");
 	if (sig != SIGALRM)
 		return;
 	char c;
@@ -184,7 +159,7 @@ ASK:
 
 void close_err(int fd) {
 	if (close(fd)) {
-		//printf("%d", fd);
+		//printf("close %d failed.\n", fd);
 		//perror("close failed.\n");
 		exit(1);
 	}

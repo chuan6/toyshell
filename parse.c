@@ -118,7 +118,7 @@ ERROR:
 	return NULL;
 }
 
-Command *PrintCommand(Command *c) {printf("DEBUG\tPrintCommand()\n");
+Command *PrintCommand(Command *c) {//printf("DEBUG\tPrintCommand()\n");
 	if (!c)
 		return NULL;
 	PipeElem *p;
@@ -134,7 +134,7 @@ Command *PrintCommand(Command *c) {printf("DEBUG\tPrintCommand()\n");
 	return c;
 }
 
-void FreeCommand(Command *c) {printf("DEBUG\tFreeCommand()\n");
+void FreeCommand(Command *c) {//printf("DEBUG\tFreeCommand()\n");
 	if (!c)
 		return;
 	freePipe(c->pipe);printf("in: %d; out: %d\n", c->fin, c->fout);
@@ -181,7 +181,7 @@ PipeElem *addToPipe(char *s, PipeElem *prev) {
 	return cmd;
 }
 
-void freePipe(PipeElem *c) {printf("DEBUG\tfreePipe()\n");
+void freePipe(PipeElem *c) {//printf("DEBUG\tfreePipe()\n");
 	PipeElem *p;
 	for (p = c; p != NULL; p = p->pipewith) {
 		//free(p->name);	//p->name == mem

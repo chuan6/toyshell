@@ -46,47 +46,50 @@ main(int argc, char *argv[])
 
 	prf *file;
 	if ((file = readProfile(profile)) == NULL)
-		goto EXIT;
+		return 0;
 
 	Alias *env = (Alias *)calloc(NALIAS_MAX, sizeof(Alias));
 	SetEnv(file->path, env);
 
 	char buf[1024];
 	int withAlarm = 0;
+	pid_t pid;
 	int *stat_loc;
 	Command *c;
-	for (;;) {
-		printf("%s", file->prompt);
-		if (gets(buf) != NULL) {
-			if (!strcmp(buf, cmd_exit))
-				goto EXIT;
-			if (!strncmp(buf, cmd_cd, strlen(cmd_cd))
-				&& isspace(*(buf + strlen(cmd_cd)))) {
-				Builtin_cd(buf + strlen(cmd_cd));
-				continue;
-			}
-			if (!strncmp(buf, cmd_alias, strlen(cmd_alias))
-				&& isspace(*(buf + strlen(cmd_alias)))) {
-				Builtin_alias(buf + strlen(cmd_alias), env);
-				continue;
-			}
-			if (!strncmp(buf, cmd_alarm, strlen(cmd_alarm))
-				&& isspace(*(buf + strlen(cmd_alarm)))) {
-				Builtin_alarm(buf + strlen(cmd_alarm), &withAlarm);
-				continue;
-			}
-			//if (fork() == 0) {
+	printf("%s", file->prompt);
+	while (gets(buf) != NULL) {
+		if (!strcmp(buf, cmd_exit))
+			break;
+
+		if (!strncmp(buf, cmd_cd, strlen(cmd_cd))
+			&& isspace(*(buf + strlen(cmd_cd)))) {
+			Builtin_cd(buf + strlen(cmd_cd));
+		} else if (!strncmp(buf, cmd_alias, strlen(cmd_alias))
+			&& isspace(*(buf + strlen(cmd_alias)))) {
+			Builtin_alias(buf + strlen(cmd_alias), env);
+		} else if (!strncmp(buf, cmd_alarm, strlen(cmd_alarm))
+			&& isspace(*(buf + strlen(cmd_alarm)))) {
+			Builtin_alarm(buf + strlen(cmd_alarm), &withAlarm);
+		} else {
+			switch (pid = fork()) {
+			case -1:
+				fprintf(stderr, "fork() in main failed.\n");
+				break;
+			case 0:		// child process
 				RunCommand(c = ParseCommand(buf), withAlarm);
 				FreeCommand(c);
-			//}
-			//wait(stat_loc);
-		} else {
-			perror("error\n");
-			goto EXIT;
+				break;
+			default:	// parent process; pid > 0
+				printf("main: pid at parent: %d\n", pid);
+				waitpid(pid, stat_loc, 0);printf("main: hello, %d returns.\n", pid);
+				break;
+			}
 		}
+		printf("%s", file->prompt);
 	}
-EXIT:
-	exit(0);
+	printf("main: exit from pid: %d\n", getpid());
+	//exit(0);
+	return 0;
 }
 
 prf *readProfile(char *profile) {
