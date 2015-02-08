@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include "shell.h"
 
@@ -65,7 +66,7 @@ main(int argc, char *argv[])
 	while (fgets(buf, CMDBUF, stdin) != NULL) {
 		if (*Norm(buf) == '\0')
 			continue;
-		
+
 		if (!strcmp(buf, cmd_exit))
 			break;
 
@@ -94,7 +95,7 @@ main(int argc, char *argv[])
 				fprintf(stderr, "fork() in main failed.\n");
 				break;
 			case 0:		// child process
-				setpgid(0, 0);	// change groupid of the child process to its own pid
+				setpgrp();	// change groupid of the child process to its own pid
 				RunCommand(c = ParseCommand(buf), withAlarm);
 				FreeCommand(c);
 				break;
